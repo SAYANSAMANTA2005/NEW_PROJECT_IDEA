@@ -1,0 +1,53 @@
+Project: RaftKV — A Distributed Key-Value Store in Java
+Architecture Overview
+Client → [Node1 (Leader)] ⇄ [Node2 (Follower)] ⇄ [Node3 (Follower)]
+              ↓ WAL              ↓ WAL              ↓ WAL
+         In-memory Map      In-memory Map      In-memory Map
+
+Each node runs: a Raft state machine (Follower/Candidate/Leader), a persistent log (WAL on disk), an RPC layer (plain HTTP or gRPC), and the actual KV store as the "application" that Raft replicates commands to.
+
+Suggested Tech
+Java 17+, plain sockets or gRPC (grpc-java) for inter-node RPC — gRPC looks great on a resume and avoids writing your own wire protocol
+Jackson for serializing log entries
+JUnit 5 for unit tests, plus a custom test harness for chaos testing
+Simple HTTP server (Javalin or Spring Boot minimal) as the client-facing API
+RocksDB (optional, later) if you want a real embedded storage engine instead of a flat file — skip this in month 1, mention as "future work"
+Week-by-Week Plan
+
+Week 1 — Single node + persistence
+
+LogEntry { term, index, command }
+Append-only log file (WAL) + in-memory index for fast lookup
+Simple KV state machine: apply(LogEntry) → mutates a ConcurrentHashMap
+Crash-recovery: reload log on startup, replay into state machine
+Unit tests: write 10k entries, kill process, restart, verify state matches
+
+Week 2 — Leader election
+
+Node states: Follower → Candidate → Leader
+ScheduledExecutorService for election timeout (randomized, e.g. 150–300ms) and heartbeats
+RequestVote RPC: term comparison, vote granting rules (only one vote per term, log up-to-date check)
+Test with 3-node cluster: kill leader, confirm new leader elected within ~1s
+
+Week 3 — Log replication
+
+AppendEntries RPC: leader pushes new entries to followers
+Commit index: entry committed once replicated to majority
+Handle log conflicts (follower's log diverges from leader's — truncate and overwrite)
+Client writes go to leader only; leader redirects/rejects if not leader
+
+Week 4 — Hardening + chaos testing + docs
+
+Snapshotting (compact the log once it passes some size, so restart doesn't replay everything)
+Chaos test script: randomly kill/restart nodes, drop network calls (Toxiproxy or a fake network layer you write), verify no data loss and no split-brain
+Benchmark: throughput/latency under normal vs. partitioned network
+README with architecture diagram, sequence diagrams for election + replication, and a recorded demo (asciinema or GIF)
+The specific "hard problems" to be ready to discuss
+Election safety — why randomized timeouts prevent split votes
+Log matching property — how AppendEntries consistency check prevents divergent logs
+Linearizable reads — naive reads from a follower can be stale; you either read-through-leader or implement a "read index" check
+Snapshot/log compaction — tradeoff between replay cost and snapshot frequency
+Idempotent client requests — what happens if a client retries a write after a leader crash mid-commit
+Resume bullet (draft)
+
+Built RaftKV, a fault-tolerant distributed key-value store in Java implementing the Raft consensus protocol (leader election, log replication, snapshotting) with gRPC-based node communication; validated correctness under simulated network partitions and node failures, achieving zero data loss across 500+ chaos-test runs.
