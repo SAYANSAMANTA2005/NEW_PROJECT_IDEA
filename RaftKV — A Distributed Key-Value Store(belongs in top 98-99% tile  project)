@@ -1,4 +1,4 @@
-Project: RaftKV — A Distributed Key-Value Store in Java
+Project: RaftKV — A Distributed Key-Value Store in Java(estimated time require -- 4-5 week)
 Architecture Overview
 Client → [Node1 (Leader)] ⇄ [Node2 (Follower)] ⇄ [Node3 (Follower)]
               ↓ WAL              ↓ WAL              ↓ WAL
